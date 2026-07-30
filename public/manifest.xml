@@ -5,7 +5,7 @@
   xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
   xsi:type="MailApp">
 
-  <!-- Id ต้องไม่ซ้ำกับแอดอิน Helpdesk (f3a7b2c1-...) -->
+  <!-- Id must differ from the Helpdesk add-in (f3a7b2c1-...) -->
   <Id>b7e41d92-5a3c-4c18-9f6e-2d80a5c37e14</Id>
   <Version>1.0.0.0</Version>
   <ProviderName>iT Services</ProviderName>
@@ -41,7 +41,7 @@
     </Form>
   </FormSettings>
 
-  <!-- ReadItem พอสำหรับอ่านผู้ส่ง/หัวข้อ/เนื้อหา/ไฟล์แนบ -->
+  <!-- ReadItem is enough: sender, subject, body, attachments -->
   <Permissions>ReadItem</Permissions>
 
   <Rule xsi:type="RuleCollection" Mode="Or">
@@ -104,7 +104,7 @@
       </bt:LongStrings>
     </Resources>
 
-    <!-- ── Mobile support (Outlook iOS/Android) ── -->
+    <!-- Mobile support (Outlook iOS/Android) -->
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
       <Requirements>
         <bt:Sets DefaultMinVersion="1.5">
