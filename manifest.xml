@@ -6,7 +6,7 @@
   xsi:type="MailApp">
 
   <!-- Id must differ from the Helpdesk add-in (f3a7b2c1-...) -->
-  <Id>b7e41d92-5a3c-4c18-9f6e-2d80a5c37e14</Id>
+  <Id>a153c2e0-5b24-431d-b45b-f1a7df26e884</Id>
   <Version>1.0.0.0</Version>
   <ProviderName>iT Services</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
