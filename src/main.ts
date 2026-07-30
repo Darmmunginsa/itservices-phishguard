@@ -164,16 +164,22 @@ async function fetchKasmTemplate(): Promise<string> {
 }
 
 // ─── Mail reading ─────────────────────────────────────────────────────────────
+/** mailbox context มีเฉพาะเมื่อรันใน Outlook — เปิด URL ตรง ๆ ในเบราว์เซอร์จะเป็น undefined */
+const mailboxItem = (): Office.MessageRead | undefined =>
+  (Office.context?.mailbox?.item as Office.MessageRead | undefined)
+
 const getBodyAsync = (type: Office.CoercionType): Promise<string> =>
   new Promise(resolve => {
-    Office.context.mailbox.item?.body.getAsync(type, r =>
+    const it = mailboxItem()
+    if (!it?.body) { resolve(''); return }
+    it.body.getAsync(type, r =>
       resolve(r.status === Office.AsyncResultStatus.Succeeded ? (r.value ?? '') : ''))
   })
 
 /** อ่าน header ต้นฉบับผ่าน Graph — ใช้ตรวจ SPF/DKIM/DMARC (ไม่ได้ก็ข้าม ไม่ error) */
 async function fetchHeaders(): Promise<Record<string, string>> {
   try {
-    const item = Office.context.mailbox.item
+    const item = mailboxItem()
     if (!item?.itemId) return {}
     const restId = Office.context.mailbox.convertToRestId(item.itemId, Office.MailboxEnums.RestVersion.v2_0)
     const token = await getGraphToken()
@@ -203,7 +209,7 @@ function parseAddressList(raw: string): { name: string; email: string }[] {
 }
 
 async function readMail(): Promise<MailInput> {
-  const item = Office.context.mailbox.item
+  const item = mailboxItem()
   const [html, text] = await Promise.all([
     getBodyAsync(Office.CoercionType.Html),
     getBodyAsync(Office.CoercionType.Text),
@@ -272,7 +278,7 @@ function reportText(): string {
 /** แนบอีเมลต้นฉบับ (.eml) เป็นหลักฐาน — ทำแบบ best-effort ไม่ให้ล้มทั้งการรายงาน */
 async function attachEml(itemId: number): Promise<boolean> {
   try {
-    const item = Office.context.mailbox.item
+    const item = mailboxItem()
     if (!item?.itemId) return false
     const restId = Office.context.mailbox.convertToRestId(item.itemId, Office.MailboxEnums.RestVersion.v2_0)
     const token = await getGraphToken()
@@ -485,6 +491,24 @@ function render(): void {
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 Office.onReady(async () => {
+  // ไม่มี mailbox context = เปิดหน้านี้ตรง ๆ ในเบราว์เซอร์ (ไม่ได้เปิดจาก Outlook)
+  // ต้องบอกให้ชัด ไม่ปล่อยให้ค้างที่ spinner
+  if (!Office.context?.mailbox) {
+    const app = document.getElementById('app')
+    if (app) app.innerHTML = `
+      <div class="p-6 text-center">
+        <div class="text-4xl mb-3">🛡️</div>
+        <h1 class="text-base font-bold text-slate-800 mb-1">PhishGuard</h1>
+        <p class="text-xs text-slate-500 mb-4">ส่วนเสริมตรวจอีเมลหลอกลวง (phishing) สำหรับ Outlook</p>
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 text-left">
+          <p class="font-semibold mb-1">หน้านี้ต้องเปิดจากภายใน Outlook</p>
+          <p class="opacity-80">เปิดอีเมลใน Outlook แล้วกดปุ่ม <b>PhishGuard</b> บนแถบเครื่องมือ —
+          การเปิด URL นี้ตรง ๆ จะไม่มีอีเมลให้ตรวจ</p>
+        </div>
+      </div>`
+    return
+  }
+
   await msalInstance.initialize()
   try { await msalInstance.handleRedirectPromise() } catch { /* ignore */ }
   state.account = msalInstance.getAllAccounts()[0] ?? null
