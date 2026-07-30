@@ -305,7 +305,7 @@ async function submitReport(): Promise<void> {
   state.reporting = true; render()
   try {
     const m = state.mail, a = state.analysis
-    const id = await spCreate(REPORT_LIST, {
+    const full: Record<string, unknown> = {
       Title: (m.subject || '(ไม่มีหัวข้อ)').slice(0, 255),
       SenderName: m.fromName.slice(0, 255),
       SenderEmail: m.fromEmail.slice(0, 255),
@@ -318,10 +318,28 @@ async function submitReport(): Promise<void> {
       ReportedBy: state.account?.name ?? '',
       ReportedEmail: state.account?.username ?? '',
       Status: 'New',
-    })
+    }
+    // การรายงานภัยคุกคามต้องไม่หายเพราะคอลัมน์ใดคอลัมน์หนึ่งชื่อไม่ตรง/ชนิดผิด
+    // → ถ้าชุดเต็มถูกปฏิเสธ (400) ให้บันทึกชุดหลักไว้ก่อน แล้วบอกผู้ใช้ว่าข้อมูลไม่ครบ
+    let id: number
+    let partial = false
+    try {
+      id = await spCreate(REPORT_LIST, full)
+    } catch (firstErr) {
+      // Title + Findings มีทุกอย่างที่จำเป็นในการสอบสวนอยู่แล้ว (Findings คือรายงานฉบับข้อความ)
+      id = await spCreate(REPORT_LIST, { Title: full.Title, Findings: full.Findings })
+        .catch(() => { throw firstErr })   // ถ้าชุดหลักก็ยังไม่ได้ → โยน error เดิมที่อธิบายชัดกว่า
+      partial = true
+      console.warn('[PhishGuard] full payload rejected, saved core fields only:', firstErr)
+    }
     const withEml = await attachEml(id)
     state.reported = true
-    showToast(withEml ? 'ส่งรายงานพร้อมอีเมลต้นฉบับแล้ว' : 'ส่งรายงานแล้ว (แนบ .eml ไม่ได้)')
+    showToast(
+      partial
+        ? 'ส่งรายงานแล้ว แต่บันทึกได้บางคอลัมน์ — ตรวจชื่อ/ชนิดคอลัมน์ในลิสต์ HD_PhishingReports'
+        : withEml ? 'ส่งรายงานพร้อมอีเมลต้นฉบับแล้ว' : 'ส่งรายงานแล้ว (แนบ .eml ไม่ได้)',
+      partial ? 'info' : 'success',
+    )
   } catch (e) {
     showToast(`ส่งรายงานไม่สำเร็จ: ${e instanceof Error ? e.message : String(e)}`, 'error')
   } finally {
