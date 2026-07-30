@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PhishGuard — iT Services</title>
+
+    <!-- Office.js must load first -->
+    <script
+      type="text/javascript"
+      src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"
+    ></script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #f8fafc;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+      }
+      .toast { animation: slideIn 0.3s ease-out; }
+      @keyframes slideIn {
+        from { transform: translateY(-20px); opacity: 0; }
+        to   { transform: translateY(0);    opacity: 1; }
+      }
+      /* URL ยาว ๆ ต้องตัดบรรทัดได้ ไม่ให้ดัน layout ของ task pane แคบ ๆ */
+      .break-url { word-break: break-all; }
+    </style>
+    <script type="module" crossorigin src="/itservices-phishguard/assets/main-Csl-q_XV.js"></script>
+    <link rel="modulepreload" crossorigin href="/itservices-phishguard/assets/PublicClientApplication-DLKYUtZW.js">
+  </head>
+  <body>
+    <div id="app" class="min-h-screen bg-slate-50"></div>
+    <div id="toast-container" class="fixed top-3 left-0 right-0 flex justify-center z-50 pointer-events-none"></div>
+
+  </body>
+</html>
