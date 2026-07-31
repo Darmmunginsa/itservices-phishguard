@@ -348,22 +348,52 @@ async function submitReport(): Promise<void> {
 }
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
+/**
+ * เปิด URL ภายนอกจาก task pane
+ * Outlook บนเครื่อง (WebView2) มัก "บล็อก window.open แบบเงียบ ๆ" → ต้องใช้ Office.context.ui
+ * openBrowserWindow ก่อน แล้วค่อย fallback (API นี้มีตั้งแต่ Mailbox 1.5 บาง client เก่าจะไม่มี)
+ */
+function openExternal(url: string): void {
+  try {
+    const ui = Office.context?.ui as { openBrowserWindow?: (u: string) => void } | undefined
+    if (typeof ui?.openBrowserWindow === 'function') { ui.openBrowserWindow(url); return }
+  } catch { /* ลองทางถัดไป */ }
+  const w = window.open(url, '_blank', 'noopener,noreferrer')
+  if (!w) showToast('เปิดหน้าต่างไม่ได้ (ถูกบล็อก) — ใช้ปุ่มคัดลอกผลตรวจแล้วเปิดเองได้', 'info')
+}
+
 function openInKasm(href: string): void {
   if (!state.kasmTemplate) {
     showToast('ยังไม่ได้ตั้งค่า Kasm — เพิ่มใน HD_Options (Category=KasmConfig)', 'info')
     return
   }
   const target = state.kasmTemplate.includes('{url}')
-  ? state.kasmTemplate.replace('{url}', encodeURIComponent(href))
+    ? state.kasmTemplate.replace('{url}', encodeURIComponent(href))
     : state.kasmTemplate + encodeURIComponent(href)
-  window.open(target, '_blank', 'noopener,noreferrer')
+  openExternal(target)
+}
+
+/** คัดลอกข้อความ — Clipboard API ใช้ไม่ได้ใน webview บางตัว จึงมี fallback */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true }
+  } catch { /* ลองทางถัดไป */ }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.focus(); ta.select()
+    const ok = document.execCommand('copy')
+    ta.remove()
+    return ok
+  } catch { return false }
 }
 
 async function copyReport(): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(reportText())
-    showToast('คัดลอกผลวิเคราะห์แล้ว')
-  } catch { showToast('คัดลอกไม่ได้', 'error') }
+  const ok = await copyText(reportText())
+  showToast(ok ? 'คัดลอกผลวิเคราะห์แล้ว' : 'คัดลอกไม่ได้ — ใช้ปุ่ม "ดู header" แล้วเลือกข้อความเองได้', ok ? 'success' : 'error')
 }
 
 async function login(): Promise<void> {
