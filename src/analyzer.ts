@@ -141,6 +141,35 @@ const hitWords = (text: string, words: string[]): string[] => {
   return words.filter(w => t.includes(lc(w)))
 }
 
+// ─── raw internet headers ──────────────────────────────────────────────────
+/**
+ * แปลง header ดิบ (จาก item.getAllInternetHeadersAsync) เป็น map
+ * รองรับ folded line ตาม RFC 5322 — บรรทัดที่ขึ้นต้นด้วย space/tab เป็นส่วนต่อของบรรทัดก่อน
+ * (ถ้าไม่รวมบรรทัดต่อ จะอ่าน Authentication-Results ยาว ๆ ได้ไม่ครบ → ตรวจ SPF/DKIM พลาด)
+ * header ชื่อซ้ำได้ (เช่น Received) → ต่อด้วย newline ไม่ให้ทับกัน
+ */
+export function parseRawHeaders(raw: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!raw) return out
+  let cur = ''
+  const flush = () => {
+    const i = cur.indexOf(':')
+    if (i > 0) {
+      const k = cur.slice(0, i).trim()
+      const v = cur.slice(i + 1).trim()
+      if (k) out[k] = out[k] ? `${out[k]}\n${v}` : v
+    }
+    cur = ''
+  }
+  for (const line of raw.replace(/\r\n/g, '\n').split('\n')) {
+    if (/^[ \t]/.test(line)) { if (cur) cur += ' ' + line.trim(); continue }
+    flush()
+    cur = line
+  }
+  flush()
+  return out
+}
+
 // ─── link extraction ───────────────────────────────────────────────────────
 /** ดึงลิงก์ทั้งหมดจาก HTML พร้อมข้อความที่ผู้ใช้เห็น */
 export function extractLinks(html: string): { href: string; text: string }[] {

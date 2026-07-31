@@ -1,5 +1,5 @@
 import { PublicClientApplication, type AccountInfo } from '@azure/msal-browser'
-import { analyze, LEVEL_META, SEV_META, domainOf, type Analysis, type MailInput } from './analyzer'
+import { analyze, parseRawHeaders, LEVEL_META, SEV_META, domainOf, type Analysis, type MailInput } from './analyzer'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 // ใช้ App registration เดียวกับแอดอิน Helpdesk → ผู้ใช้ไม่ต้อง consent ใหม่
@@ -176,7 +176,26 @@ const getBodyAsync = (type: Office.CoercionType): Promise<string> =>
       resolve(r.status === Office.AsyncResultStatus.Succeeded ? (r.value ?? '') : ''))
   })
 
-/** อ่าน header ต้นฉบับผ่าน Graph — ใช้ตรวจ SPF/DKIM/DMARC (ไม่ได้ก็ข้าม ไม่ error) */
+/**
+ * อ่าน header ตรงจาก Office.js (requirement set 1.8) — ไม่ต้อง login และไม่ต้องใช้ Graph
+ * ทางนี้ทำให้ตรวจ SPF/DKIM/DMARC ได้ทันทีที่เปิดแอดอิน ; client เก่ากว่า 1.8 จะคืนค่าว่างแล้วไป fallback
+ */
+function headersViaOfficeJs(): Promise<Record<string, string>> {
+  return new Promise(resolve => {
+    let supported = false
+    try { supported = Office.context.requirements.isSetSupported('Mailbox', '1.8') } catch { supported = false }
+    const it = mailboxItem() as (Office.MessageRead & {
+      getAllInternetHeadersAsync?: (cb: (r: Office.AsyncResult<string>) => void) => void
+    }) | undefined
+    if (!supported || typeof it?.getAllInternetHeadersAsync !== 'function') { resolve({}); return }
+    try {
+      it.getAllInternetHeadersAsync(r =>
+        resolve(r.status === Office.AsyncResultStatus.Succeeded ? parseRawHeaders(r.value ?? '') : {}))
+    } catch { resolve({}) }
+  })
+}
+
+/** อ่าน header ต้นฉบับผ่าน Graph — ใช้เมื่อ Office.js อ่านให้ไม่ได้ (ต้อง login + Mail.Read) */
 async function fetchHeaders(): Promise<Record<string, string>> {
   try {
     const item = mailboxItem()
@@ -239,19 +258,29 @@ async function runAnalysis(): Promise<void> {
   render()
 
   const mail = await readMail()
-  // วิเคราะห์รอบแรกทันทีด้วยข้อมูลที่ไม่ต้อง login — ผู้ใช้เห็นผลเร็ว
-  state.mail = mail
-  state.analysis = analyze(mail)
+
+  // รอบแรก: header จาก Office.js (ไม่ต้อง login) → ได้ SPF/DKIM/DMARC + Reply-To ทันที
+  const ojsHeaders = await headersViaOfficeJs()
+  const withHeaders = (h: Record<string, string>, base = mail): MailInput => ({
+    ...base,
+    headers: h,
+    replyTo: parseAddressList(Object.entries(h).find(([k]) => k.toLowerCase() === 'reply-to')?.[1] ?? ''),
+  })
+  state.mail = withHeaders(ojsHeaders)
+  state.analysis = analyze(state.mail)
+  state.headersLoaded = Object.keys(ojsHeaders).length > 0
   state.loading = false
   render()
 
-  // ถ้า login แล้ว → เติมข้อมูลที่ต้องใช้สิทธิ์ (header + รายชื่อพนักงาน) แล้ววิเคราะห์ซ้ำ
+  // ถ้า login แล้ว → เติมรายชื่อพนักงาน (ตรวจการปลอมเป็นคนใน) + header ผ่าน Graph ถ้า Office.js อ่านไม่ได้
   if (state.account) {
-    const [headers, people] = await Promise.all([fetchHeaders(), fetchInternalPeople()])
-    const replyToHeader = Object.entries(headers).find(([k]) => k.toLowerCase() === 'reply-to')?.[1] ?? ''
-    state.mail = { ...mail, headers, internalPeople: people, replyTo: parseAddressList(replyToHeader) }
+    const [people, graphHeaders] = await Promise.all([
+      fetchInternalPeople(),
+      state.headersLoaded ? Promise.resolve(ojsHeaders) : fetchHeaders(),
+    ])
+    state.mail = { ...withHeaders(graphHeaders), internalPeople: people }
     state.analysis = analyze(state.mail)
-    state.headersLoaded = Object.keys(headers).length > 0
+    state.headersLoaded = Object.keys(graphHeaders).length > 0
     render()
   }
 }
